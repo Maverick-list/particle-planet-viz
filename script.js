@@ -216,10 +216,10 @@ function drawStatusIndicator(ctx, status, message) {
         ctx.fillText("Status: Memuat Model AI...", 10, 470); // Bottom left
     } else if (status === 'active') { // Camera running but no hand yet
         ctx.fillStyle = "cyan";
-        ctx.fillText("Status: Mencari Tangan...", 10, 470);
+        ctx.fillText("SENSOR READY", 10, 470);
     } else if (status === 'tracking') { // Hand found
         ctx.fillStyle = "lime";
-        ctx.fillText("Status: Tangan Terdeteksi!", 10, 470);
+        ctx.fillText("HAND SEEN", 10, 470);
 
         // Visual indicator in corner
         ctx.beginPath();
@@ -325,8 +325,9 @@ let lastVideoTime = -1;
 async function createHandLandmarker() {
     try {
         drawStatusIndicator(canvasCtx, 'loading');
+        // Use local WASM files
         const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            "./vendor/mediapipe/wasm"
         );
         handLandmarker = await HandLandmarker.createFromOptions(vision, {
             baseOptions: {
@@ -337,6 +338,8 @@ async function createHandLandmarker() {
             numHands: 1
         });
         console.log("HandLandmarker created successfully!");
+        // Status update: SENSOR READY (interim state before camera starts)
+        drawStatusIndicator(canvasCtx, 'active');
         enableCam();
     } catch (error) {
         console.error("Error creating HandLandmarker:", error);
