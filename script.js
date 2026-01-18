@@ -209,19 +209,25 @@ function updateInteraction(x, y) {
 function drawStatusIndicator(ctx, status, message) {
     ctx.save();
     ctx.font = "16px Arial";
+    ctx.fillStyle = "white"; // Default text color
+
     if (status === 'loading') {
         ctx.fillStyle = "yellow";
-        ctx.fillText("Loading AI...", 10, 20);
-    } else if (status === 'active') {
-        ctx.fillStyle = "green";
+        ctx.fillText("Status: Memuat Model AI...", 10, 470); // Bottom left
+    } else if (status === 'active') { // Camera running but no hand yet
+        ctx.fillStyle = "cyan";
+        ctx.fillText("Status: Mencari Tangan...", 10, 470);
+    } else if (status === 'tracking') { // Hand found
+        ctx.fillStyle = "lime";
+        ctx.fillText("Status: Tangan Terdeteksi!", 10, 470);
+
+        // Visual indicator in corner
         ctx.beginPath();
         ctx.arc(20, 20, 5, 0, 2 * Math.PI);
         ctx.fill();
-        ctx.fillStyle = "white";
-        ctx.fillText("Tracking Active", 35, 25);
     } else if (status === 'error') {
         ctx.fillStyle = "red";
-        ctx.fillText("AI Error: " + message, 10, 20);
+        ctx.fillText("Status Error: " + message, 10, 470);
     }
     ctx.restore();
 }
@@ -235,11 +241,14 @@ function onResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // Draw status
-    drawStatusIndicator(canvasCtx, 'active');
+    // Default status if cam is running
+    let currentStatus = 'active';
 
     // New API returns 'landmarks' instead of 'multiHandLandmarks'
     if (results.landmarks && results.landmarks.length > 0) {
+        currentStatus = 'tracking';
+        drawStatusIndicator(canvasCtx, currentStatus);
+
         for (const landmarks of results.landmarks) {
             // Draw Landmarks Manually
             drawHand(canvasCtx, landmarks);
@@ -281,6 +290,7 @@ function onResults(results) {
         // No hand detected
         material.uniforms.uHover.value = 0;
         window.targetRotationSpeed = 0.002;
+        drawStatusIndicator(canvasCtx, currentStatus); // 'active' (searching)
     }
 
     canvasCtx.restore();
