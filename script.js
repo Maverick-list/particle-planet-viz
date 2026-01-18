@@ -1,3 +1,15 @@
+// --- Error Handling ---
+window.onerror = function (msg, url, line) {
+    const overlay = document.getElementById('error-overlay');
+    const msgElem = document.getElementById('error-message');
+    if (overlay && msgElem) {
+        overlay.style.display = 'block';
+        msgElem.innerHTML = `Error: ${msg}<br><br><small>(${url.split('/').pop()}:${line})</small>`;
+    }
+    console.error('Global Error:', msg, url, line);
+    return false; // Let default handler run too
+};
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -311,7 +323,12 @@ async function startCamera() {
 
     } catch (error) {
         console.error("Error accessing camera:", error);
-        alert("Camera access denied or not available. Please check permissions.");
+        const overlay = document.getElementById('error-overlay');
+        const msgElem = document.getElementById('error-message');
+        if (overlay && msgElem) {
+            overlay.style.display = 'block';
+            msgElem.innerHTML = `Camera Access Failed:<br>${error.message}<br><br>Please allow camera usage.`;
+        }
     }
 }
 
