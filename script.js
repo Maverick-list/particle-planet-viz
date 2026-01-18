@@ -4,7 +4,7 @@ window.onerror = function (msg, url, line) {
     const msgElem = document.getElementById('error-message');
     if (overlay && msgElem) {
         overlay.style.display = 'block';
-        msgElem.innerHTML = `Error: ${msg}<br><br><small>(${url.split('/').pop()}:${line})</small>`;
+        msgElem.innerHTML = `Error: ${msg}<br><br><small>(${url.split('/').pop()}:${line})</small><br><br><button onclick="document.getElementById('error-overlay').style.display='none'">Dismiss / Try Anyway</button>`;
     }
     console.error('Global Error:', msg, url, line);
     return false; // Let default handler run too
@@ -285,7 +285,8 @@ function onResults(results) {
 
 const hands = new Hands({
     locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        // Use a specific, stable version to avoid CDN lookup failures
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
     }
 });
 
@@ -296,7 +297,42 @@ hands.setOptions({
     minTrackingConfidence: 0.5
 });
 
-hands.onResults(onResults);
+let handTrackingActive = false;
+hands.onResults((results) => {
+    handTrackingActive = true;
+    onResults(results);
+});
+
+// Fallback: If Hand Tracking fails to load within 10 seconds, degrade gracefully
+setTimeout(() => {
+    if (!handTrackingActive) {
+        console.warn("Hand tracking timed out. Switching to mouse/touch interaction.");
+
+        // Hide Error Overlay if it was shown due to a delay
+        const overlay = document.getElementById('error-overlay');
+        if (overlay && overlay.style.display === 'block') {
+            overlay.style.display = 'none'; // Dismiss error to show planet
+        }
+
+        // Show a small non-intrusive toast notification
+        const toast = document.createElement('div');
+        toast.style.position = 'fixed';
+        toast.style.bottom = '20px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.background = 'rgba(255, 100, 0, 0.8)';
+        toast.style.color = 'white';
+        toast.style.padding = '10px 20px';
+        toast.style.borderRadius = '5px';
+        toast.style.zIndex = '200';
+        toast.style.fontFamily = 'sans-serif';
+        toast.innerText = "Hand Tracking Slow/Failed. Touch & Mouse Enabled.";
+        document.body.appendChild(toast);
+
+        // Auto-remove after 5s
+        setTimeout(() => toast.remove(), 5000);
+    }
+}, 10000);
 
 // --- 2. Camera Setup (Manual for control) ---
 // We use manual getUserMedia to force 'user' (front) facing mode on mobile
