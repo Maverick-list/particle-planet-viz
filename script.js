@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- Configuration ---
+const isMobile = window.innerWidth < 768; // Simple check for mobile/tablet
+
 const CONFIG = {
-    particleCountSphere: 20000,
-    particleCountRing: 15000,
+    particleCountSphere: isMobile ? 7000 : 20000, // Reduced for mobile
+    particleCountRing: isMobile ? 5000 : 15000,   // Reduced for mobile
     planetRadius: 5,
     ringInnerRadius: 7,
     ringOuterRadius: 12,
