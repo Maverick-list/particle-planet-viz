@@ -286,24 +286,63 @@ hands.setOptions({
 
 hands.onResults(onResults);
 
-const cameraUtils = new Camera(videoElement, {
-    onFrame: async () => {
-        await hands.send({ image: videoElement });
-    },
-    width: 640,
-    height: 480
-});
-cameraUtils.start();
+// --- 2. Camera Setup (Manual for control) ---
+// We use manual getUserMedia to force 'user' (front) facing mode on mobile
+async function startCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'user', // Force front camera
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            }
+        });
+        videoElement.srcObject = stream;
+        videoElement.play();
+
+        // Custom loop to process frames
+        function sendFrame() {
+            if (videoElement.readyState >= 2) { // 2 = HAVE_CURRENT_DATA
+                hands.send({ image: videoElement }).catch(e => console.error(e));
+            }
+            requestAnimationFrame(sendFrame);
+        }
+        sendFrame();
+
+    } catch (error) {
+        console.error("Error accessing camera:", error);
+        alert("Camera access denied or not available. Please check permissions.");
+    }
+}
+
+startCamera();
 
 // 2. Mouse Fallback (Standard interaction)
+function handleInput(x, y) {
+    updateInteraction(x, y);
+}
+
 window.addEventListener('mousemove', (event) => {
-    // Optional: Allow mouse override if hand not detected? 
-    // For now, let's keep both active. Mouse will just overwrite position if it moves.
-    // But hand updates much faster (every frame), so hand wins if active.
     const x = (event.clientX / window.innerWidth) * 2 - 1;
     const y = -(event.clientY / window.innerHeight) * 2 + 1;
-    updateInteraction(x, y);
+    handleInput(x, y);
 });
+
+// Touch (Mobile Fallback)
+const onTouch = (event) => {
+    // Prevent scrolling while interacting
+    event.preventDefault();
+
+    if (event.touches.length > 0) {
+        const touch = event.touches[0];
+        const x = (touch.clientX / window.innerWidth) * 2 - 1;
+        const y = -(touch.clientY / window.innerHeight) * 2 + 1;
+        handleInput(x, y);
+    }
+};
+
+window.addEventListener('touchmove', onTouch, { passive: false });
+window.addEventListener('touchstart', onTouch, { passive: false });
 
 // --- Resize Handler ---
 window.addEventListener('resize', () => {
