@@ -1,6 +1,6 @@
 # The Universe at Your Fingertips 🌌
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Launch-blue?style=for-the-badge&logo=github)](https://maverick-list.github.io/particle-planet-viz/)
+**[🔴 LIVE DEMO](https://maverick-list.github.io/particle-planet-viz/)**
 
 **A 3D Interactive Particle Planet Visualization with In-Browser Hand Tracking.**
 
