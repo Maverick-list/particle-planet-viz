@@ -205,6 +205,27 @@ function updateInteraction(x, y) {
     }
 }
 
+// Visual Feedback Helper
+function drawStatusIndicator(ctx, status, message) {
+    ctx.save();
+    ctx.font = "16px Arial";
+    if (status === 'loading') {
+        ctx.fillStyle = "yellow";
+        ctx.fillText("Loading AI...", 10, 20);
+    } else if (status === 'active') {
+        ctx.fillStyle = "green";
+        ctx.beginPath();
+        ctx.arc(20, 20, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "white";
+        ctx.fillText("Tracking Active", 35, 25);
+    } else if (status === 'error') {
+        ctx.fillStyle = "red";
+        ctx.fillText("AI Error: " + message, 10, 20);
+    }
+    ctx.restore();
+}
+
 // --- 1. MediaPipe Hands Setup ---
 const videoElement = document.getElementsByClassName('input_video')[0];
 const canvasElement = document.getElementsByClassName('output_canvas')[0];
@@ -213,6 +234,9 @@ const canvasCtx = canvasElement.getContext('2d');
 function onResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+    // Draw status
+    drawStatusIndicator(canvasCtx, 'active');
 
     // New API returns 'landmarks' instead of 'multiHandLandmarks'
     if (results.landmarks && results.landmarks.length > 0) {
@@ -289,18 +313,25 @@ let webcamRunning = false;
 let lastVideoTime = -1;
 
 async function createHandLandmarker() {
-    const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-    );
-    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-            modelAssetPath: "./hand_landmarker.task",
-            delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        numHands: 1
-    });
-    enableCam();
+    try {
+        drawStatusIndicator(canvasCtx, 'loading');
+        const vision = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+        );
+        handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+                modelAssetPath: "./hand_landmarker.task", // Local file
+                delegate: "GPU"
+            },
+            runningMode: "VIDEO",
+            numHands: 1
+        });
+        console.log("HandLandmarker created successfully!");
+        enableCam();
+    } catch (error) {
+        console.error("Error creating HandLandmarker:", error);
+        drawStatusIndicator(canvasCtx, 'error', error.message);
+    }
 }
 
 function enableCam() {
@@ -313,21 +344,30 @@ function enableCam() {
             videoElement.srcObject = stream;
             videoElement.addEventListener("loadeddata", predictWebcam);
             webcamRunning = true;
+        }).catch((err) => {
+            console.error("Camera access denied:", err);
+            drawStatusIndicator(canvasCtx, 'error', "Camera denied");
         });
     }
 }
 
 async function predictWebcam() {
+    if (webcamRunning) {
+        window.requestAnimationFrame(predictWebcam);
+    }
+
     if (videoElement.currentTime !== lastVideoTime) {
         lastVideoTime = videoElement.currentTime;
         const startTimeMs = performance.now();
         if (handLandmarker) {
-            const results = handLandmarker.detectForVideo(videoElement, startTimeMs);
-            onResults(results);
+            try {
+                const results = handLandmarker.detectForVideo(videoElement, startTimeMs);
+                onResults(results);
+            } catch (err) {
+                console.error("Detection error:", err);
+                // Don't crash loop, just log
+            }
         }
-    }
-    if (webcamRunning) {
-        window.requestAnimationFrame(predictWebcam);
     }
 }
 
