@@ -10,12 +10,6 @@
 
 <body>
 
-    <div id="error-overlay" style="display: none;">
-        <h2>⚠️ System Error</h2>
-        <p id="error-message">Something went wrong.</p>
-        <button onclick="window.location.reload()">Reload Page</button>
-    </div>
-
     <div id="ui-container">
         <h1>The Universe at Your Fingertips</h1>
         <p>✋ Zoom (Open/Close) | 👋 Rotate (Left/Right) | 👆 Repel</p>
@@ -28,19 +22,13 @@
     </div>
 
     <!-- MediaPipe Dependencies -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
-    <!-- Three.js from CDN -->
+    <!-- MediaPipe Dependencies (New Tasks API) -->
     <script type="importmap">
         {
             "imports": {
                 "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm"
             }
         }
     </script>

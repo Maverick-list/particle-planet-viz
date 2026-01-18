@@ -1,24 +1,11 @@
-// --- Error Handling ---
-window.onerror = function (msg, url, line) {
-    const overlay = document.getElementById('error-overlay');
-    const msgElem = document.getElementById('error-message');
-    if (overlay && msgElem) {
-        overlay.style.display = 'block';
-        msgElem.innerHTML = `Error: ${msg}<br><br><small>(${url.split('/').pop()}:${line})</small><br><br><button onclick="document.getElementById('error-overlay').style.display='none'">Dismiss / Try Anyway</button>`;
-    }
-    console.error('Global Error:', msg, url, line);
-    return false; // Let default handler run too
-};
-
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
 // --- Configuration ---
-const isMobile = window.innerWidth < 768; // Simple check for mobile/tablet
-
 const CONFIG = {
-    particleCountSphere: isMobile ? 7000 : 20000, // Reduced for mobile
-    particleCountRing: isMobile ? 5000 : 15000,   // Reduced for mobile
+    particleCountSphere: 20000,
+    particleCountRing: 15000,
     planetRadius: 5,
     ringInnerRadius: 7,
     ringOuterRadius: 12,
@@ -227,28 +214,22 @@ function onResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // Draw Landmarks on minimal UI
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        for (const landmarks of results.multiHandLandmarks) {
-            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS,
-                { color: '#00FF00', lineWidth: 2 });
-            drawLandmarks(canvasCtx, landmarks,
-                { color: '#FF0000', lineWidth: 1, radius: 2 });
+    // New API returns 'landmarks' instead of 'multiHandLandmarks'
+    if (results.landmarks && results.landmarks.length > 0) {
+        for (const landmarks of results.landmarks) {
+            // Draw Landmarks Manually
+            drawHand(canvasCtx, landmarks);
 
             // --- Gesture Logic ---
             // 1. Repulsion (Index Finger Tip - Index 8)
             const indexTip = landmarks[8];
             // MediaPipe: x=0 (left) -> 1 (right), y=0 (top) -> 1 (bottom)
             // Three.js Logic requires: -1 to 1.
-            // Note: Camera is mirrored by CSS transform: scaleX(-1), but logic perceives raw data.
-            // If user moves hand right (in reality), raw X increases.
-            // We want natural feeling.
             const x = indexTip.x * 2 - 1;
             const y = -(indexTip.y * 2 - 1);
             updateInteraction(x, y);
 
             // 2. Zoom Logic (Open Hand vs Closed Fist)
-            // Distance: Wrist(0) to MiddleTip(12) vs Wrist(0) to IndexMCP(5)
             const wrist = landmarks[0];
             const middleTip = landmarks[12];
             const indexMcp = landmarks[5];
@@ -264,8 +245,6 @@ function onResults(results) {
             window.targetZoom = zoom;
 
             // 3. Rotation Logic (Hand Position X)
-            // Left Edge (< 0.2) -> Rotate Left
-            // Right Edge (> 0.8) -> Rotate Right
             if (indexTip.x < 0.2) {
                 window.targetRotationSpeed = -0.05;
             } else if (indexTip.x > 0.8) {
@@ -283,119 +262,86 @@ function onResults(results) {
     canvasCtx.restore();
 }
 
-const hands = new Hands({
-    locateFile: (file) => {
-        // Use a specific, stable version to avoid CDN lookup failures
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+function drawHand(ctx, landmarks) {
+    if (HandLandmarker.HAND_CONNECTIONS) {
+        ctx.strokeStyle = '#00FF00';
+        ctx.lineWidth = 2;
+        for (const connection of HandLandmarker.HAND_CONNECTIONS) {
+            const start = landmarks[connection[0]];
+            const end = landmarks[connection[1]];
+            ctx.beginPath();
+            ctx.moveTo(start.x * ctx.canvas.width, start.y * ctx.canvas.height);
+            ctx.lineTo(end.x * ctx.canvas.width, end.y * ctx.canvas.height);
+            ctx.stroke();
+        }
     }
-});
 
-hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-});
-
-let handTrackingActive = false;
-hands.onResults((results) => {
-    handTrackingActive = true;
-    onResults(results);
-});
-
-// Fallback: If Hand Tracking fails to load within 10 seconds, degrade gracefully
-setTimeout(() => {
-    if (!handTrackingActive) {
-        console.warn("Hand tracking timed out. Switching to mouse/touch interaction.");
-
-        // Hide Error Overlay if it was shown due to a delay
-        const overlay = document.getElementById('error-overlay');
-        if (overlay && overlay.style.display === 'block') {
-            overlay.style.display = 'none'; // Dismiss error to show planet
-        }
-
-        // Show a small non-intrusive toast notification
-        const toast = document.createElement('div');
-        toast.style.position = 'fixed';
-        toast.style.bottom = '20px';
-        toast.style.left = '50%';
-        toast.style.transform = 'translateX(-50%)';
-        toast.style.background = 'rgba(255, 100, 0, 0.8)';
-        toast.style.color = 'white';
-        toast.style.padding = '10px 20px';
-        toast.style.borderRadius = '5px';
-        toast.style.zIndex = '200';
-        toast.style.fontFamily = 'sans-serif';
-        toast.innerText = "Hand Tracking Slow/Failed. Touch & Mouse Enabled.";
-        document.body.appendChild(toast);
-
-        // Auto-remove after 5s
-        setTimeout(() => toast.remove(), 5000);
-    }
-}, 10000);
-
-// --- 2. Camera Setup (Manual for control) ---
-// We use manual getUserMedia to force 'user' (front) facing mode on mobile
-async function startCamera() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'user', // Force front camera
-                width: { ideal: 640 },
-                height: { ideal: 480 }
-            }
-        });
-        videoElement.srcObject = stream;
-        videoElement.play();
-
-        // Custom loop to process frames
-        function sendFrame() {
-            if (videoElement.readyState >= 2) { // 2 = HAVE_CURRENT_DATA
-                hands.send({ image: videoElement }).catch(e => console.error(e));
-            }
-            requestAnimationFrame(sendFrame);
-        }
-        sendFrame();
-
-    } catch (error) {
-        console.error("Error accessing camera:", error);
-        const overlay = document.getElementById('error-overlay');
-        const msgElem = document.getElementById('error-message');
-        if (overlay && msgElem) {
-            overlay.style.display = 'block';
-            msgElem.innerHTML = `Camera Access Failed:<br>${error.message}<br><br>Please allow camera usage.`;
-        }
+    ctx.fillStyle = '#FF0000';
+    for (const landmark of landmarks) {
+        ctx.beginPath();
+        ctx.arc(landmark.x * ctx.canvas.width, landmark.y * ctx.canvas.height, 2, 0, 2 * Math.PI);
+        ctx.fill();
     }
 }
 
-startCamera();
+let handLandmarker = undefined;
+let webcamRunning = false;
+let lastVideoTime = -1;
+
+async function createHandLandmarker() {
+    const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+    );
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+            modelAssetPath: "./hand_landmarker.task",
+            delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numHands: 1
+    });
+    enableCam();
+}
+
+function enableCam() {
+    if (!handLandmarker) return;
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 }
+        }).then((stream) => {
+            videoElement.srcObject = stream;
+            videoElement.addEventListener("loadeddata", predictWebcam);
+            webcamRunning = true;
+        });
+    }
+}
+
+async function predictWebcam() {
+    if (videoElement.currentTime !== lastVideoTime) {
+        lastVideoTime = videoElement.currentTime;
+        const startTimeMs = performance.now();
+        if (handLandmarker) {
+            const results = handLandmarker.detectForVideo(videoElement, startTimeMs);
+            onResults(results);
+        }
+    }
+    if (webcamRunning) {
+        window.requestAnimationFrame(predictWebcam);
+    }
+}
+
+createHandLandmarker();
 
 // 2. Mouse Fallback (Standard interaction)
-function handleInput(x, y) {
-    updateInteraction(x, y);
-}
-
 window.addEventListener('mousemove', (event) => {
+    // Optional: Allow mouse override if hand not detected? 
+    // For now, let's keep both active. Mouse will just overwrite position if it moves.
+    // But hand updates much faster (every frame), so hand wins if active.
     const x = (event.clientX / window.innerWidth) * 2 - 1;
     const y = -(event.clientY / window.innerHeight) * 2 + 1;
-    handleInput(x, y);
+    updateInteraction(x, y);
 });
-
-// Touch (Mobile Fallback)
-const onTouch = (event) => {
-    // Prevent scrolling while interacting
-    event.preventDefault();
-
-    if (event.touches.length > 0) {
-        const touch = event.touches[0];
-        const x = (touch.clientX / window.innerWidth) * 2 - 1;
-        const y = -(touch.clientY / window.innerHeight) * 2 + 1;
-        handleInput(x, y);
-    }
-};
-
-window.addEventListener('touchmove', onTouch, { passive: false });
-window.addEventListener('touchstart', onTouch, { passive: false });
 
 // --- Resize Handler ---
 window.addEventListener('resize', () => {
